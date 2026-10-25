@@ -1,0 +1,2561 @@
+{
+  "info": {
+    "name": "Mini Autorizador",
+    "description": "Testes da API do mini-autorizador (VR Benefícios): o roteiro do enunciado, os casos de borda, o bloqueio opcional por senhas erradas, a carga inicial de cartões e a idempotência por Idempotency-Key. Veja o README desta pasta.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{apiUsuario}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{apiSenha}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "apiUsuario",
+      "value": "username"
+    },
+    {
+      "key": "apiSenha",
+      "value": "password"
+    },
+    {
+      "key": "bloqueioAtivo",
+      "value": "false"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Roteiro do enunciado",
+      "description": "Os testes que o avaliador da VR executa, na ordem do enunciado: criar um cartão, conferir o saldo, fazer transações até o saldo acabar, senha inválida e cartão inexistente. Cada execução usa um número de cartão novo, então pode ser repetida.",
+      "item": [
+        {
+          "name": "Criar cartão",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoRoteiro', '9' + digitos(15));",
+                  "pm.collectionVariables.set('aprovadas', 0);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('o corpo devolve o número e a senha enviados', () => {",
+                  "  const corpo = pm.response.json();",
+                  "  pm.expect(corpo.numeroCartao).to.eql(pm.collectionVariables.get('cartaoRoteiro'));",
+                  "  pm.expect(corpo.senha).to.eql('1234');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoRoteiro}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Consultar saldo inicial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 com o saldo inicial de 500.00', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('500.00');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoRoteiro}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoRoteiro}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transação de 60,00",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const aprovadas = Number(pm.collectionVariables.get('aprovadas'));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('transação aprovada: 201 com o corpo OK', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.text()).to.eql('OK');",
+                  "  });",
+                  "  pm.collectionVariables.set('aprovadas', aprovadas + 1);",
+                  "  if (aprovadas + 1 >= 20) {",
+                  "    pm.test('o laço parou por segurança', () => pm.expect.fail('mais de 20 transações aprovadas'));",
+                  "    postman.setNextRequest(null);",
+                  "  }",
+                  "} else {",
+                  "  pm.test('recusada: 422 SALDO_INSUFICIENTE', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.text()).to.eql('SALDO_INSUFICIENTE');",
+                  "  });",
+                  "  pm.test('8 transações de 60,00 foram aprovadas antes da recusa', () => pm.expect(aprovadas).to.eql(8));",
+                  "  postman.setNextRequest('Consultar saldo final');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoRoteiro}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 60.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Repete (com a consulta de saldo logo depois) até o sistema recusar por saldo insuficiente."
+          }
+        },
+        {
+          "name": "Consultar saldo após a transação",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const aprovadas = Number(pm.collectionVariables.get('aprovadas'));",
+                  "const esperado = ((50000 - 6000 * aprovadas) / 100).toFixed(2);",
+                  "pm.test('saldo depois de ' + aprovadas + ' transação(ões) é ' + esperado, () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql(esperado);",
+                  "});",
+                  "postman.setNextRequest('Transação de 60,00');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoRoteiro}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoRoteiro}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar saldo final",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 com o saldo final de 20.00', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('20.00');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoRoteiro}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoRoteiro}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transação com senha inválida",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SENHA_INVALIDA', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SENHA_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoRoteiro}}\",\n  \"senhaCartao\": \"0000\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Transação com cartão inexistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo CARTAO_INEXISTENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('CARTAO_INEXISTENTE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"1111222233334444\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Casos de borda",
+      "description": "Autenticação, formato do número (exatamente 16 dígitos), limites de valor e de senha, tipos JSON, cabeçalho Accept e valor igual ao saldo. Cada pasta cria os cartões de que precisa, e a execução pode ser repetida.",
+      "item": [
+        {
+          "name": "Criar cartão para os casos de borda",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoBorda', '8' + digitos(15));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('o corpo devolve o número e a senha enviados', () => {",
+                  "  const corpo = pm.response.json();",
+                  "  pm.expect(corpo.numeroCartao).to.eql(pm.collectionVariables.get('cartaoBorda'));",
+                  "  pm.expect(corpo.senha).to.eql('1234');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cartão duplicado devolve 422 com o corpo enviado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));",
+                  "pm.test('o corpo devolve o número e a senha enviados', () => {",
+                  "  const corpo = pm.response.json();",
+                  "  pm.expect(corpo.numeroCartao).to.eql(pm.collectionVariables.get('cartaoBorda'));",
+                  "  pm.expect(corpo.senha).to.eql('9999');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senha\": \"9999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Consultar cartão inexistente devolve 404 sem corpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('sem corpo', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/1111222233334444",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "1111222233334444"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sem credenciais devolve 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoBorda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoBorda}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Senha da API errada devolve 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoBorda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoBorda}}"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{apiUsuario}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "senha-errada",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "/error não é público: devolve 401 sem credenciais",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/error",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "error"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Número com 12 dígitos devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"123456789012\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número com 20 dígitos devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"12345678901234567890\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número com 15 dígitos devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"654987302563450\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número com 17 dígitos devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"65498730256345012\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número com letra devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"654987302563450A\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Consulta de número com 15 dígitos devolve 404 sem corpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('sem corpo', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/654987302563450",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "654987302563450"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transação com número de 15 dígitos devolve 422 CARTAO_INEXISTENTE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo CARTAO_INEXISTENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('CARTAO_INEXISTENTE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"654987302563450\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Zeros à esquerda são preservados no cadastro",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoZeros', '0000' + digitos(12));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('o corpo devolve o número e a senha enviados', () => {",
+                  "  const corpo = pm.response.json();",
+                  "  pm.expect(corpo.numeroCartao).to.eql(pm.collectionVariables.get('cartaoZeros'));",
+                  "  pm.expect(corpo.senha).to.eql('1234');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoZeros}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Zeros à esquerda são preservados na consulta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 com o saldo do cartão que começa com zeros', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('500.00');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoZeros}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoZeros}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Senha vazia no cadastro devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"7000000000000001\",\n  \"senha\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha com mais de 72 bytes devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"7000000000000002\",\n  \"senha\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número do cartão como número JSON devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": 6549873025634501,\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Um número sem aspas perderia os zeros à esquerda, por isso só texto JSON é aceito."
+          }
+        },
+        {
+          "name": "Accept text/plain no cadastro devolve 406",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoAccept', '6' + digitos(15));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('406 Not Acceptable', () => pm.response.to.have.status(406));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/plain"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoAccept}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "O cartão do Accept recusado não foi criado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404: a recusa por Accept não deixou efeito colateral', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoAccept}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoAccept}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Accept application/json no cadastro é aceito",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoAccept}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Valor com 3 casas decimais devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.001\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Valor zero devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Valor negativo devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": -5.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Valor muito grande (1e40000000) devolve 400 rapidamente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('respondeu em menos de 1 segundo', () => pm.expect(pm.response.responseTime).to.be.below(1000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 1e40000000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Transação sem o campo valor devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha em branco na transação devolve 422 SENHA_INVALIDA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SENHA_INVALIDA', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SENHA_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Número em branco na transação devolve 422 CARTAO_INEXISTENTE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo CARTAO_INEXISTENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('CARTAO_INEXISTENTE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Accept application/xml na transação devolve 406",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('406 Not Acceptable', () => pm.response.to.have.status(406));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/xml"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Accept application/json na transação devolve 201 OK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('corpo OK', () => pm.expect(pm.response.text()).to.eql('OK'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBorda}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 1.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Criar cartão para o teste de valor igual ao saldo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoSaldo', '5' + digitos(15));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoSaldo}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Valor igual ao saldo é autorizado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('corpo OK', () => pm.expect(pm.response.text()).to.eql('OK'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoSaldo}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 500.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "O saldo fica zerado, nunca negativo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 com saldo 0.00', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('0.00');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoSaldo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoSaldo}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Valor de 0,01 com saldo zerado devolve 422 SALDO_INSUFICIENTE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SALDO_INSUFICIENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SALDO_INSUFICIENTE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoSaldo}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 0.01\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Bloqueio por senhas erradas",
+      "description": "O bloqueio é opcional e vem desligado. Com a variável bloqueioAtivo=false (padrão), três senhas erradas não bloqueiam o cartão; com a aplicação iniciada com BLOQUEIO_SENHA_ATIVO=true e bloqueioAtivo=true, a transação seguinte recebe 422 CARTAO_BLOQUEADO. Os testes conferem o modo indicado.",
+      "item": [
+        {
+          "name": "Cadastrar cartão do bloqueio",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoBloqueio', '4' + digitos(15));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBloqueio}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha errada 1 de 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SENHA_INVALIDA', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SENHA_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBloqueio}}\",\n  \"senhaCartao\": \"0001\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha errada 2 de 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SENHA_INVALIDA', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SENHA_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBloqueio}}\",\n  \"senhaCartao\": \"0002\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha errada 3 de 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SENHA_INVALIDA', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SENHA_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBloqueio}}\",\n  \"senhaCartao\": \"0003\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Senha certa depois de 3 erradas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const bloqueioAtivo = String(pm.variables.get('bloqueioAtivo')) === 'true';",
+                  "if (bloqueioAtivo) {",
+                  "  pm.test('bloqueio ligado: 422 CARTAO_BLOQUEADO mesmo com a senha certa', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.text()).to.eql('CARTAO_BLOQUEADO');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('bloqueio desligado (padrão): 201 OK', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.text()).to.eql('OK');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoBloqueio}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Saldo depois do bloqueio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const bloqueioAtivo = String(pm.variables.get('bloqueioAtivo')) === 'true';",
+                  "const esperado = bloqueioAtivo ? '500.00' : '490.00';",
+                  "pm.test('saldo ' + esperado, () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql(esperado);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoBloqueio}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoBloqueio}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Carga inicial",
+      "description": "Rode esta pasta no Collection Runner com o arquivo carga-inicial.csv (uma iteração por linha): cadastra o cartão e aplica as transações indicadas. É idempotente: um cartão que já existe não recebe as transações de novo.",
+      "item": [
+        {
+          "name": "Cadastrar cartão da carga",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('restantes', Number(pm.iterationData.get('transacoes') || 0));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const criado = pm.response.code === 201;",
+                  "pm.test('cartão cadastrado (201) ou já existente (422)', () => pm.expect([201, 422]).to.include(pm.response.code));",
+                  "pm.collectionVariables.set('criado', String(criado));",
+                  "if (!criado || Number(pm.iterationData.get('transacoes') || 0) === 0) {",
+                  "  postman.setNextRequest('Consultar saldo da carga');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{numeroCartao}}\",\n  \"senha\": \"{{senha}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Aplicar transação da carga",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('transação da carga aprovada: 201 OK', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.text()).to.eql('OK');",
+                  "});",
+                  "const restantes = Number(pm.collectionVariables.get('restantes')) - 1;",
+                  "pm.collectionVariables.set('restantes', restantes);",
+                  "if (restantes > 0) {",
+                  "  postman.setNextRequest('Aplicar transação da carga');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{numeroCartao}}\",\n  \"senhaCartao\": \"{{senha}}\",\n  \"valor\": {{valor}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Repete até aplicar a quantidade de transações indicada na coluna \"transacoes\"."
+          }
+        },
+        {
+          "name": "Consultar saldo da carga",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 com o saldo do cartão', () => pm.response.to.have.status(200));",
+                  "if (pm.collectionVariables.get('criado') === 'true') {",
+                  "  const centavos = 50000 - Number(pm.iterationData.get('transacoes')) * Math.round(Number(pm.iterationData.get('valor')) * 100);",
+                  "  const esperado = (centavos / 100).toFixed(2);",
+                  "  pm.test('saldo ' + esperado + ' depois da carga', () => pm.expect(pm.response.text()).to.eql(esperado));",
+                  "} else {",
+                  "  console.log('Cartão ' + pm.iterationData.get('numeroCartao') + ' já existia; as transações não foram reaplicadas. Saldo atual: ' + pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{numeroCartao}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{numeroCartao}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Idempotência",
+      "description": "O cabeçalho opcional Idempotency-Key: reenviar a mesma compra com a mesma chave devolve a resposta original sem debitar de novo; a mesma chave em outra compra é recusada. Cada execução gera cartão e chave novos.",
+      "item": [
+        {
+          "name": "Cadastrar cartão da idempotência",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const digitos = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');",
+                  "pm.collectionVariables.set('cartaoIdem', '8' + digitos(15));",
+                  "pm.collectionVariables.set('chaveIdem', 'compra-' + digitos(12));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senha\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Compra com Idempotency-Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 OK', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.text()).to.eql('OK');",
+                  "});",
+                  "pm.test('a resposta é a original (sem Idempotent-Replayed)', () => pm.expect(pm.response.headers.has('Idempotent-Replayed')).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{chaveIdem}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reenvio da mesma compra devolve a resposta original",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 OK, igual à primeira', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.text()).to.eql('OK');",
+                  "});",
+                  "pm.test('a resposta é uma repetição (Idempotent-Replayed: true)', () => pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{chaveIdem}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "O reenvio não debitou de novo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('saldo 490.00, debitado uma vez só', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('490.00');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cartoes/{{cartaoIdem}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cartoes",
+                "{{cartaoIdem}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mesma chave com outro valor devolve 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 em ProblemDetail', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.json().detail).to.include('Idempotency-Key');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{chaveIdem}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 20.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Chave fora do formato devolve 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 com o detalhe', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().detail).to.include('Idempotency-Key');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "chave com espaço"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Recusa com chave nova",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SALDO_INSUFICIENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SALDO_INSUFICIENTE');",
+                  "});",
+                  "pm.test('a resposta é a original (sem Idempotent-Replayed)', () => pm.expect(pm.response.headers.has('Idempotent-Replayed')).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{chaveIdem}}-recusa"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 500.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reenvio da recusa devolve a mesma recusa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com o corpo SALDO_INSUFICIENTE', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.text()).to.eql('SALDO_INSUFICIENTE');",
+                  "});",
+                  "pm.test('a resposta é uma repetição (Idempotent-Replayed: true)', () => pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{chaveIdem}}-recusa"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transacoes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroCartao\": \"{{cartaoIdem}}\",\n  \"senhaCartao\": \"1234\",\n  \"valor\": 500.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
