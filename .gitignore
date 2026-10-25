@@ -1,0 +1,13 @@
+target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Artefatos gerados localmente (relatórios de QA e de avaliação, definições de agentes).
+# De docs/ só vão para o repositório o enunciado, a documentação de arquitetura e a collection do Postman.
+docs/*
+!docs/ENUNCIADO.md
+!docs/arquitetura/
+!docs/postman/
+.claude/
