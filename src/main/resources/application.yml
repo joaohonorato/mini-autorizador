@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: mini-autorizador
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/miniautorizador?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  # O esquema é criado e evoluído pelas migrações em db/migration. Um banco criado antes do Flyway
+  # já tem a tabela cartao, que corresponde à versão 1: nele, só as migrações seguintes são aplicadas.
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  security:
+    user:
+      name: ${API_USER:username}
+      password: ${API_PASSWORD:password}
+
+server:
+  error:
+    include-message: never
+
+# O Hibernate registra a mensagem do banco antes de devolver a exceção. No cadastro de cartão
+# duplicado, essa mensagem traz o número completo ("Duplicate entry '<número>'"), e o adapter
+# já trata o caso como JA_EXISTENTE. Erros SQL inesperados continuam subindo como exceção e
+# são registrados pelo servidor, sem depender deste logger.
+logging:
+  level:
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+    br.com.vr.miniautorizador.infrastructure.filter: DEBUG
+    br.com.vr.miniautorizador.application: INFO
+
+# Bloqueio do cartão por 24 horas depois de 3 senhas erradas seguidas (ver README). Desligado por
+# padrão: ligado, a API pode devolver CARTAO_BLOQUEADO, um motivo que não está no contrato do enunciado.
+autorizador:
+  bloqueio-senha:
+    ativo: ${BLOQUEIO_SENHA_ATIVO:false}
+  # Idempotência de POST /transacoes (cabeçalho Idempotency-Key): por quanto tempo uma chave devolve
+  # a resposta original e de quanto em quanto tempo as chaves vencidas são apagadas.
+  idempotencia:
+    validade: ${IDEMPOTENCIA_VALIDADE:PT24H}
+    intervalo-limpeza: ${IDEMPOTENCIA_INTERVALO_LIMPEZA:PT1H}
