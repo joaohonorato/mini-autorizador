@@ -51,6 +51,7 @@ class TransacaoController {
     ResponseEntity<String> autorizar(
             @RequestHeader(name = CABECALHO_CHAVE, required = false) Optional<String> chave,
             @Valid @RequestBody TransacaoRequest requisicao) {
+        ContextoDeLog.porCartao(requisicao.numeroCartao());
         return switch (autorizarTransacao.executar(chave, requisicao.numeroCartao(), requisicao.senhaCartao(), requisicao.valor())) {
             case Nova(ResultadoAutorizacao resultado) -> responder(resultado, new HttpHeaders());
             case Repetida(ResultadoAutorizacao resultado) -> responder(resultado, cabecalhoDeRepeticao());

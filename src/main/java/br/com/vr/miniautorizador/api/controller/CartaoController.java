@@ -17,16 +17,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.util.EnumMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/cartoes")
 class CartaoController {
-
-    private static final Map<ResultadoCriacao, HttpStatus> STATUS_POR_RESULTADO = new EnumMap<>(Map.of(
-            ResultadoCriacao.CRIADO, HttpStatus.CREATED,
-            ResultadoCriacao.JA_EXISTENTE, HttpStatus.UNPROCESSABLE_ENTITY));
 
     private final CriarCartao criarCartao;
     private final ConsultarSaldo consultarSaldo;
@@ -45,13 +39,16 @@ class CartaoController {
      */
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<NovoCartaoRequest> criar(@Valid @RequestBody NovoCartaoRequest requisicao) {
+        ContextoDeLog.porCartao(requisicao.numeroCartao());
         ResultadoCriacao resultado = criarCartao.executar(requisicao.numeroCartao(), requisicao.senha());
-        return ResponseEntity.status(STATUS_POR_RESULTADO.get(resultado)).body(requisicao);
+        HttpStatus status = resultado == ResultadoCriacao.CRIADO ? HttpStatus.CREATED : HttpStatus.UNPROCESSABLE_ENTITY;
+        return ResponseEntity.status(status).body(requisicao);
     }
 
     @GetMapping(value = "/{numeroCartao}", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<BigDecimal> consultarSaldo(
             @PathVariable String numeroCartao) {
+        ContextoDeLog.porCartao(numeroCartao);
         return consultarSaldo.executar(numeroCartao)
                 .map(Dinheiro::valor)
                 .map(ResponseEntity::ok)

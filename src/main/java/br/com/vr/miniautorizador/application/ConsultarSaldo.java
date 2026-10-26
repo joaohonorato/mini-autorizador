@@ -26,17 +26,12 @@ public class ConsultarSaldo {
      * @return o saldo, ou vazio se não existir cartão com esse número
      */
     public Optional<Dinheiro> executar(String numeroCartao) {
-        MdcContexto.porCartao(numeroCartao);
-        try {
-            Optional<Dinheiro> saldo = NumeroCartao.tentar(numeroCartao)
-                    .flatMap(repositorio::buscar)
-                    .map(Cartao::saldo);
-            saldo.ifPresentOrElse(
-                    encontrado -> LOG.debug("saldo.consultado saldo={}", encontrado.valor()),
-                    () -> LOG.info("cartao.nao.encontrado"));
-            return saldo;
-        } finally {
-            MdcContexto.limpar();
-        }
+        Optional<Dinheiro> saldo = NumeroCartao.tentar(numeroCartao)
+                .flatMap(repositorio::buscar)
+                .map(Cartao::saldo);
+        saldo.ifPresentOrElse(
+                encontrado -> LOG.debug("saldo.consultado saldo={}", encontrado.valor()),
+                () -> LOG.info("cartao.nao.encontrado"));
+        return saldo;
     }
 }

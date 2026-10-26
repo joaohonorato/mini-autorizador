@@ -12,7 +12,6 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import br.com.vr.miniautorizador.support.CartaoRepositoryQueObservaMdc;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -65,17 +64,6 @@ class CriarCartaoTest {
 
         assertThat(registros.list).extracting(ILoggingEvent::getFormattedMessage)
                 .containsExactly("cartao.criado", "cartao.duplicado");
-    }
-
-    @Test
-    @DisplayName("o cartão mascarado fica no contexto de log durante o cadastro e sai ao terminar")
-    void contextoDeLogDuranteOCadastro() {
-        CartaoRepositoryQueObservaMdc observador = new CartaoRepositoryQueObservaMdc();
-
-        new CriarCartao(observador, cifrador).executar(NUMERO, SENHA);
-
-        assertThat(observador.cartoesVistos()).containsExactly("************4501");
-        assertThat(MDC.get("numeroCartao")).isNull();
     }
 
     @Test

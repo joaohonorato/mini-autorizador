@@ -12,12 +12,10 @@ import br.com.vr.miniautorizador.support.CartaoRepositoryEmMemoria;
 import br.com.vr.miniautorizador.support.CifradorSenhaFake;
 import br.com.vr.miniautorizador.support.RegistroIdempotenciaEmMemoria;
 import br.com.vr.miniautorizador.support.RelogioAjustavel;
-import br.com.vr.miniautorizador.support.CartaoRepositoryQueObservaMdc;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -41,20 +39,6 @@ class AutorizarTransacaoIdempotenteTest {
     @BeforeEach
     void cadastrarCartao() {
         new CriarCartao(repositorio, cifrador).executar(NUMERO, SENHA);
-    }
-
-    @Test
-    @DisplayName("o cartão mascarado fica no contexto de log durante a autorização e sai ao terminar")
-    void contextoDeLogDuranteAAutorizacao() {
-        CartaoRepositoryQueObservaMdc observador = new CartaoRepositoryQueObservaMdc();
-        AutorizarTransacaoIdempotente observado = new AutorizarTransacaoIdempotente(
-                new AutorizarTransacao(observador, new BloqueioPorSenhaEmMemoria(), cifrador, new RelogioAjustavel()),
-                registro);
-
-        observado.executar(Optional.empty(), NUMERO, SENHA, DEZ);
-
-        assertThat(observador.cartoesVistos()).containsOnly("************4501");
-        assertThat(MDC.get("numeroCartao")).isNull();
     }
 
     @Test

@@ -21,6 +21,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -30,8 +31,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -217,6 +220,21 @@ class ContratoApiTest {
         mvc.perform(get("/cartoes/" + NUMERO).with(httpBasic("username", "password")))
                 .andExpect(status().isOk())
                 .andExpect(content().string("495.15"));
+    }
+
+    @Test
+    @DisplayName("o cartão mascarado já está no contexto de log quando o caso de uso roda")
+    void cartaoMascaradoNoContextoDeLog() throws Exception {
+        AtomicReference<String> visto = new AtomicReference<>();
+        when(consultarSaldo.executar(NUMERO)).thenAnswer(invocacao -> {
+            visto.set(MDC.get("numeroCartao"));
+            return Optional.empty();
+        });
+
+        mvc.perform(get("/cartoes/" + NUMERO).with(httpBasic("username", "password")));
+
+        assertThat(visto.get()).isEqualTo("************4501");
+        MDC.clear();
     }
 
     @Test

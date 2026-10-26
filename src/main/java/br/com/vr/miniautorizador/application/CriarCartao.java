@@ -24,15 +24,10 @@ public class CriarCartao {
     }
 
     public ResultadoCriacao executar(String numeroCartao, String senha) {
-        MdcContexto.porCartao(numeroCartao);
-        try {
-            Cartao cartao = Cartao.criar(new NumeroCartao(numeroCartao), senha, cifrador);
-            ResultadoCriacao resultado = repositorio.salvarNovo(cartao);
-            LOG.info("cartao.{}", descricao(resultado));
-            return resultado;
-        } finally {
-            MdcContexto.limpar();
-        }
+        Cartao cartao = Cartao.criar(new NumeroCartao(numeroCartao), senha, cifrador);
+        ResultadoCriacao resultado = repositorio.salvarNovo(cartao);
+        LOG.info("cartao.{}", descricao(resultado));
+        return resultado;
     }
 
     private static String descricao(ResultadoCriacao resultado) {

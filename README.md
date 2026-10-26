@@ -168,12 +168,12 @@ O código de produção (`src/main`) não tem `if`, operador ternário, `break` 
 | Camada | Teste | Ferramenta | O que garante |
 |---|---|---|---|
 | Domínio | `CartaoTest`, `DinheiroTest`, `NumeroCartaoTest`, `SenhaCifradaTest`, `ResultadoAutorizacaoTest`, `ChaveIdempotenciaTest` | JUnit 5 + AssertJ | Regras e invariantes, sem framework |
-| Aplicação | `CriarCartaoTest`, `ConsultarSaldoTest`, `AutorizarTransacaoTest`, `AutorizarTransacaoIdempotenteTest` | JUnit 5 + AssertJ | Fluxos completos com fakes de comportamento real, inclusive a corrida entre leitura e débito, o bloqueio por senhas erradas (com um relógio que o teste avança) e o contexto de log (MDC) preenchido só com o número mascarado durante a operação |
+| Aplicação | `CriarCartaoTest`, `ConsultarSaldoTest`, `AutorizarTransacaoTest`, `AutorizarTransacaoIdempotenteTest` | JUnit 5 + AssertJ | Fluxos completos com fakes de comportamento real, inclusive a corrida entre leitura e débito, e o bloqueio por senhas erradas (com um relógio que o teste avança) |
 | Infraestrutura | `BCryptCifradorSenhaTest` | JUnit 5 + AssertJ | Hash com salt, verificação de senha e limite de 72 bytes |
 | Infraestrutura | `CartaoRepositoryJpaAdapterIT` | `@DataJpaTest` + Testcontainers | Update condicional, chave duplicada e concorrência contra MySQL 5.7 real |
 | Infraestrutura | `RegistroIdempotenciaJdbcAdapterIT` | `@JdbcTest` + Testcontainers | Reserva da chave, repetição do resultado, chave com outra requisição, ação que falha, 30 requisições simultâneas e limpeza, contra MySQL 5.7 real |
 | Infraestrutura | `BloqueioPorSenhaJpaAdapterIT` | `@DataJpaTest` + Testcontainers | Contagem atômica de senhas erradas, vencimento do bloqueio e 50 erros simultâneos contra MySQL 5.7 real |
-| API | `ContratoApiTest` | JUnit 5 + MockMvc + Mockito | Status, corpo, autenticação e cabeçalho `Accept` exatamente como no contrato |
+| API | `ContratoApiTest` | JUnit 5 + MockMvc + Mockito | Status, corpo, autenticação e cabeçalho `Accept` exatamente como no contrato, e o contexto de log (MDC) preenchido só com o número mascarado |
 | API | `BloqueioPorSenhaApiIT` | `@SpringBootTest` + Testcontainers | Bloqueio ligado pela configuração, de ponta a ponta pelo HTTP, inclusive a ordem: cartão bloqueado e sem saldo recusa por `CARTAO_BLOQUEADO` |
 | API | `SenhaNoBancoIT` | `@SpringBootTest` + Testcontainers | Depois de um cadastro pelo HTTP, a coluna `senha` do MySQL guarda um hash BCrypt e não o texto original |
 | API | `ConcorrenciaMultiInstanciaIT` | `SpringApplicationBuilder` + Testcontainers | Duas instâncias da aplicação (contextos Spring completos, com portas e pools próprios) no mesmo MySQL 5.7: 100 transações de R$ 10,00 divididas entre elas aprovam exatamente 50 e zeram o saldo |

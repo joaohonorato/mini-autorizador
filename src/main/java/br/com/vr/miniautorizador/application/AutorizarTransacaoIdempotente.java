@@ -35,21 +35,16 @@ public class AutorizarTransacaoIdempotente {
     }
 
     public Execucao executar(Optional<String> chave, String numeroCartao, String senhaCartao, BigDecimal valor) {
-        MdcContexto.porCartao(numeroCartao);
-        try {
-            Dinheiro valorTransacao = Dinheiro.positivo(valor);
-            Execucao execucao = chave.map(ChaveIdempotencia::new)
-                    .map(identificada -> registro.executarUmaVez(identificada, impressao(numeroCartao, valorTransacao),
-                            () -> autorizarTransacao.executar(numeroCartao, senhaCartao, valor)))
-                    .orElseGet(() -> new Execucao.Nova(autorizarTransacao.executar(numeroCartao, senhaCartao, valor)));
-            switch (execucao) {
-                case Execucao.Nova nova -> LOG.debug("transacao.idempotente.nova");
-                case Execucao.Repetida repetida -> LOG.info("transacao.idempotente.repetida");
-            }
-            return execucao;
-        } finally {
-            MdcContexto.limpar();
+        Dinheiro valorTransacao = Dinheiro.positivo(valor);
+        Execucao execucao = chave.map(ChaveIdempotencia::new)
+                .map(identificada -> registro.executarUmaVez(identificada, impressao(numeroCartao, valorTransacao),
+                        () -> autorizarTransacao.executar(numeroCartao, senhaCartao, valor)))
+                .orElseGet(() -> new Execucao.Nova(autorizarTransacao.executar(numeroCartao, senhaCartao, valor)));
+        switch (execucao) {
+            case Execucao.Nova nova -> LOG.debug("transacao.idempotente.nova");
+            case Execucao.Repetida repetida -> LOG.info("transacao.idempotente.repetida");
         }
+        return execucao;
     }
 
     private static String impressao(String numeroCartao, Dinheiro valor) {
