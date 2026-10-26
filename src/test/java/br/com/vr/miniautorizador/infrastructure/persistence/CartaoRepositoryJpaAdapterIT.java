@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
@@ -163,8 +164,10 @@ class CartaoRepositoryJpaAdapterIT {
     @Test
     @DisplayName("20 cadastros simultâneos do mesmo número criam um único cartão")
     void cadastrosSimultaneosCriamUmUnicoCartao() throws Exception {
+        // Número nunca usado: reaproveitar um recém-apagado faz o InnoDB desfazer inserções por deadlock.
+        NumeroCartao numeroNovo = new NumeroCartao("%016d".formatted(ThreadLocalRandom.current().nextLong(1_000_000_000_000_000L)));
         List<Cartao> candidatos = IntStream.range(0, 20)
-                .mapToObj(i -> Cartao.criar(NUMERO, "senha-" + i, cifrador))
+                .mapToObj(i -> Cartao.criar(numeroNovo, "senha-" + i, cifrador))
                 .toList();
         AtomicInteger proximo = new AtomicInteger();
 
@@ -173,6 +176,6 @@ class CartaoRepositoryJpaAdapterIT {
         assertThat(resultados).filteredOn(ResultadoCriacao.CRIADO::equals).hasSize(1);
         assertThat(resultados).filteredOn(ResultadoCriacao.JA_EXISTENTE::equals).hasSize(19);
         assertThat(jpa.count()).isEqualTo(1);
-        assertThat(adapter.buscar(NUMERO).orElseThrow().saldo()).isEqualTo(Dinheiro.de("500.00"));
+        assertThat(adapter.buscar(numeroNovo).orElseThrow().saldo()).isEqualTo(Dinheiro.de("500.00"));
     }
 }

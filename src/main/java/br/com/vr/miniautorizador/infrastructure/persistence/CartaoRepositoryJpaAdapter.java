@@ -8,7 +8,6 @@ import br.com.vr.miniautorizador.domain.compartilhado.Dinheiro;
 import br.com.vr.miniautorizador.domain.transacao.MotivoRecusa;
 import br.com.vr.miniautorizador.domain.transacao.ResultadoAutorizacao;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -20,7 +19,6 @@ import java.util.Optional;
 class CartaoRepositoryJpaAdapter implements CartaoRepository {
 
     private static final int UMA_LINHA_ALTERADA = 1;
-    private static final int TENTATIVAS_EM_DEADLOCK = 3;
 
     private final CartaoJpaRepository jpa;
 
@@ -36,27 +34,14 @@ class CartaoRepositoryJpaAdapter implements CartaoRepository {
     /**
      * A chave primária garante a unicidade. Em vez de consultar antes de inserir, o que abriria
      * uma janela de corrida, tenta inserir e trata a violação da chave como cartão já existente.
-     *
-     * <p>Se o número acabou de ser apagado, inserções simultâneas dele disputam a linha marcada
-     * como apagada, e o InnoDB pode desfazer uma delas por deadlock. Nesse caso a inserção é
-     * repetida, como o próprio MySQL orienta, e a nova tentativa resulta em criado ou já existente.</p>
      */
     @Override
     public ResultadoCriacao salvarNovo(Cartao cartao) {
-        return inserir(cartao, TENTATIVAS_EM_DEADLOCK);
-    }
-
-    private ResultadoCriacao inserir(Cartao cartao, int tentativasRestantes) {
         try {
             jpa.saveAndFlush(CartaoMapper.paraEntidade(cartao));
             return ResultadoCriacao.CRIADO;
         } catch (DataIntegrityViolationException e) {
             return ResultadoCriacao.JA_EXISTENTE;
-        } catch (PessimisticLockingFailureException deadlock) {
-            return Optional.of(tentativasRestantes - 1)
-                    .filter(restantes -> restantes > 0)
-                    .map(restantes -> inserir(cartao, restantes))
-                    .orElseThrow(() -> deadlock);
         }
     }
 

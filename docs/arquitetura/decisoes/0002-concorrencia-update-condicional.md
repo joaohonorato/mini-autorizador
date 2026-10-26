@@ -29,6 +29,4 @@ O cadastro de cartão segue o mesmo princípio: em vez de consultar e depois ins
 - Funciona entre instâncias, sem laço de nova tentativa e com uma ida ao banco.
 - A regra do saldo existe em dois lugares: a pré-checagem no agregado e o `UPDATE`. É um custo aceito.
 - Foi validado contra o MySQL 5.7 real: um teste com 80 débitos simultâneos de R$ 10,00 num cartão de R$ 500,00 exige exatamente 50 aprovados e saldo zero. O teste foi confirmado como capaz de falhar: ele quebra se o `AND saldo >= :valor` for removido, se o débito virar "ler, subtrair, salvar" ou se o `save` virar merge.
-- Cadastros simultâneos do mesmo número que acabou de ser apagado podem entrar em deadlock no InnoDB. A aplicação não apaga cartões, então isso só aparece em testes que limpam a tabela; o adapter repete a inserção, até 3 tentativas, e o resultado vira criado ou já existente.
-
 **Quando reconsiderar.** Se surgirem regras de débito que dependam de mais de uma linha ou de estado além do saldo, como um limite diário ou um saldo por tipo de benefício, o update condicional deixa de bastar. Aí `@Version` com nova tentativa, ou um registro imutável de lançamentos (ledger) do qual o saldo seja derivado, passam a fazer sentido.
