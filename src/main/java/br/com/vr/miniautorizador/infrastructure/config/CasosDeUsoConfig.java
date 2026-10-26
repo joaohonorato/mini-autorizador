@@ -9,12 +9,9 @@ import br.com.vr.miniautorizador.domain.cartao.CartaoRepository;
 import br.com.vr.miniautorizador.domain.cartao.CifradorSenha;
 import br.com.vr.miniautorizador.domain.cartao.SemBloqueioPorSenha;
 import br.com.vr.miniautorizador.domain.transacao.RegistroIdempotencia;
-import br.com.vr.miniautorizador.infrastructure.filter.MdcFilter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 
 import java.time.Clock;
 
@@ -24,14 +21,6 @@ import java.time.Clock;
  */
 @Configuration
 class CasosDeUsoConfig {
-
-    @Bean
-    FilterRegistrationBean<MdcFilter> mdcFilter() {
-        FilterRegistrationBean<MdcFilter> registro = new FilterRegistrationBean<>(new MdcFilter());
-        registro.addUrlPatterns("/*");
-        registro.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        return registro;
-    }
 
     @Bean
     CriarCartao criarCartao(CartaoRepository repositorio, CifradorSenha cifrador) {

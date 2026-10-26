@@ -25,7 +25,7 @@ Hoje essa regra é mantida por convenção e conferida por busca de imports. Nã
 | `application` | Um caso de uso por classe, sem anotações do Spring | `CriarCartao`, `ConsultarSaldo`, `AutorizarTransacao`, `AutorizarTransacaoIdempotente` |
 | `infrastructure/persistence` | Persistência com JPA e MySQL | `CartaoEntity`, `CartaoMapper`, `CartaoJpaRepository`, `CartaoRepositoryJpaAdapter`, `BloqueioPorSenhaJpaAdapter`, `RegistroIdempotenciaJdbcAdapter`, `LimpezaIdempotencia` |
 | `infrastructure/seguranca` | Cifragem de senha | `BCryptCifradorSenha` |
-| `infrastructure/config` | Ligação das peças, segurança e JSON | `CasosDeUsoConfig`, `SegurancaConfig`, `JacksonConfig`, `AgendamentoConfig` |
+| `infrastructure/config` | Ligação das peças, segurança e JSON | `CasosDeUsoConfig`, `SegurancaConfig`, `JacksonConfig`, `AgendamentoConfig`, `LogsConfig` |
 | `api/controller` | Tradução entre HTTP e os casos de uso | `CartaoController`, `TransacaoController` |
 | `api/dto` | Corpos de requisição | `NovoCartaoRequest`, `TransacaoRequest` |
 | `api` | Tradução das exceções de entrada para HTTP | `ApiExceptionHandler` |
